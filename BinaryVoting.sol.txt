@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.18; //stating our solidity version
+
+contract BinaryVoting{
+    //proposal structure:
+    struct Proposal{
+        string name;
+        uint yesVotes;
+        uint noVotes;
+        uint endTime;
+        bool isActive;
+        bool passed;
+    }
+
+//1] State Variables:
+    address public owner;  // only owner can register new voters and propose new proposals
+    Proposal public currentProposal;
+    mapping(address => bool) isRegisteredVoter;
+    mapping(address => bool) hasVoted;
+    address[] registeredVoters;
+    mapping (address => bool) allowed;
+
+// Events:
+    event VoterRegistered(address voter);
+    event ProposalAdded(string name, uint endTime);
+    event VoteCast(address voter, bool vote);
+    event VotingEnded(bool passed);
+    event PermissionsChanged(address voter, bool allowed);
+
+//constructors:
+    constructor() {
+        owner = msg.sender; //assigns the address of the deployer to be the owner
+    }
+
+ //2] access control modifiers: 
+    //restricts access to only the owner:
+    modifier onlyOwner(){
+        require(msg.sender == owner , "only owner can perform this operation");
+        _;
+    }
+
+    //restricts access to only active proposals:
+    modifier onlyifActive(){
+        require(currentProposal.isActive , "no active proposal");
+        require(block.timestamp <= currentProposal.endTime ,"voting period has ended");
+        _;
+    }
+    
+    //restricts accesst to only registersd voters
+    modifier onlyRegistered(){
+        require(isRegisteredVoter[msg.sender] , "only registered can vote , contact owner to register");
+        _;
+    }
+
+    //restricts accesst to only allowed addresses:
+    modifier onlyAllowed(){
+        require(allowed[msg.sender],"only allowed voters to perform this operation ");
+        _;
+    }
+
+//3] Functions:
+    //function that allows owner to register voter:
+    function registerVoter(address _newVoter) public onlyOwner{
+        isRegisteredVoter[_newVoter] = true;
+        registeredVoters.push(_newVoter);
+        emit VoterRegistered(_newVoter);
+    }
+
+    //function that allows owner to create new proposal if there are no active one:
+    function addProposal(string memory _name , uint _durationInDays) public   onlyOwner{
+        // this checks if there is an active proposal or not:
+        require(!currentProposal.isActive || block.timestamp > currentProposal.endTime,"there is already an active proposal");
+        
+        //creating a new proposal with the given parameters: 
+        Proposal memory newProp; 
+        newProp.name = _name;
+        newProp.isActive = true;  
+        newProp.endTime = (_durationInDays * 24 * 60 * 60) + block.timestamp;
+        currentProposal = newProp;
+        
+        emit ProposalAdded(_name, newProp.endTime);
+     }
+
+    //function that allows only registered voters to vote if there is an active proposal:
+    function vote(bool  _vote) public onlyAllowed onlyifActive{
+        require(!hasVoted[msg.sender] ,"you can only vote once on the current proposal");
+
+        if(_vote){
+            currentProposal.yesVotes += 1;
+        }
+        else {
+            currentProposal.noVotes += 1;
+        }
+        hasVoted[msg.sender] = true;
+        emit VoteCast(msg.sender, _vote);
+    }
+
+    //function that allows owner to end proposal and calculate result:
+    function endVoting() public onlyOwner onlyifActive{
+        if (currentProposal.yesVotes - currentProposal.noVotes > 0){
+            currentProposal.passed = true;
+        }
+        else{
+            currentProposal.passed = false;
+        }
+        currentProposal.isActive = false;
+        
+        // resetting hasVoted mapping to false for all registered voters:
+       for (uint256 i = 0; i < registeredVoters.length; i++) {
+            hasVoted[registeredVoters[i]] = false; // Reset voters status
+        }
+        revokeAll(); 
+        // after current proposel ends revoke all voting permissions 
+
+        emit VotingEnded(currentProposal.passed);
+    }
+
+    function getResult() view public returns (bool){
+        require(!currentProposal.isActive , "voting has not ended yet");
+        return currentProposal.passed;
+    }
+
+    function allow(address _allowed) public onlyOwner{
+        require(isRegisteredVoter[_allowed], "register address first before using this function ");
+        require(!currentProposal.isActive,"cannot modify voting permissions until voting for current proposal ends");
+        allowed[_allowed] = true;
+        emit PermissionsChanged(_allowed, true);
+    }
+
+    function revoke(address _revoked) public onlyOwner{
+        require(isRegisteredVoter[_revoked], "cannot revoke someone that is not registered");
+        require(!currentProposal.isActive,"cannot modify voting permissions until voting for current proposal ends"); 
+        allowed[_revoked] = false;
+        emit PermissionsChanged(_revoked, false);
+    }
+
+    function allowAll() public onlyOwner{
+        require(!currentProposal.isActive , "cannot modify voting permissions until voting for current proposal ends");
+        for(uint256 i = 0; i < registeredVoters.length;i++){
+            allowed[registeredVoters[i]] = true;
+            emit PermissionsChanged(registeredVoters[i], true);
+        }
+    }
+
+    function revokeAll() public onlyOwner{
+        require(!currentProposal.isActive , "cannot modify voting permissions until voting for current proposal ends");
+        for(uint256 i = 0; i < registeredVoters.length;i++){
+            allowed[registeredVoters[i]] = false;
+            emit PermissionsChanged(registeredVoters[i], false);
+        }
+    }
+    function listRegisteredVoters() public view onlyOwner returns (address[] memory){
+        return registeredVoters;
+    }
+}

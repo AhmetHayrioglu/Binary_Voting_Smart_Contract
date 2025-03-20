@@ -2,7 +2,8 @@
 
 ## Overview
 This is a Solidity-based binary voting smart contract that allows registered voters to cast votes on proposals for either 'Yes' or 'No'. The contract ensures controlled access through modifiers and allows only permitted users to participate in the voting process. The owner has control over voter registration, proposal creation, and voting permissions.
-Warning : as this was a learning project gas is not optimised , use a testnet if you want to try this contract.
+
+!!Warning!! : as this was a learning project gas is not optimised , use a testnet if you want to try this contract.
 ## Prerequisites
 To run and test this smart contract, you will need:
 - A web browser
